@@ -1,8 +1,10 @@
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+import Stripe from "stripe";
+
+const stripe = new Stripe(process.env.NEXT_PUBLIC_STRIPE_SECRET_KEY);
 
 export default async function handler(req, res) {
   if (req.method === "POST") {
-    console.log(req.body.cartItems);
+    console.log(req.body);
     try {
       const params = {
         submit_type: "pay",
@@ -10,20 +12,43 @@ export default async function handler(req, res) {
         payment_method_types: ["card"],
         billing_address_collection: "auto",
         shipping_options: [
-          { shipping_rate: "shr_1LtIdiHirBd7RHlZ4Hmc6a88" },
-          { shipping_rate: "shr_1LtIeOHirBd7RHlZF2kAYOQV" },
+          {
+            shipping_rate:
+              "shr_1LtLUzHirBd7RHlZAPbjhWhbshr_1LtIeOHirBd7RHlZF2kAYOQV",
+          },
         ],
-        line_items: req.body.cartItems.map((item)=>{
-          const img = item.ima
+        line_items: req.body.map((item) => {
+          const img = item.image[0].asset._ref;
+          const newImage = img
+            .replace(
+              "image-",
+              "https://cdn.sanity.io/images/lqstgnoh/production/"
+            )
+            .replace("-webp", ".webp");
+          // -jpeg, .jpeg OR -png, .png, depending on file
+          return {
+            price_data: {
+              currency: "usd",
+              product_data: {
+                name: item.name,
+                images: [newImage],
+              },
+              unit_amount: item.price * 100,
+            },
+            adjustable_quantity: {
+              enabled: true,
+              minimum: 1,
+            },
+            quantity: item.quantity,
+          };
         }),
-        mode: "payment",
         success_url: `${req.headers.origin}/?success=true`,
         cancel_url: `${req.headers.origin}/?canceled=true`,
         automatic_tax: { enabled: true },
       };
       // Create Checkout Sessions from body params.
       const session = await stripe.checkout.sessions.create(params);
-      res.redirect(303, session.url);
+      res.status(200).json(session);
     } catch (err) {
       res.status(err.statusCode || 500).json(err.message);
     }
